@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
@@ -14,6 +14,10 @@ export default function TVMode() {
   const [urgentTasks, setUrgentTasks] = useState<any[]>([]);
   const [currentCard, setCurrentCard] = useState(0);
 
+  const countdownInterval = useRef<NodeJS.Timeout | null>(null);
+  const dataInterval = useRef<NodeJS.Timeout | null>(null);
+  const cardInterval = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     const targetDate = new Date("2025-12-16T00:00:00");
 
@@ -23,6 +27,10 @@ export default function TVMode() {
 
       if (diff <= 0) {
         setCountdown("🏆 DIA DO CAMPEONATO!");
+        if (countdownInterval.current) {
+          clearInterval(countdownInterval.current);
+          countdownInterval.current = null;
+        }
         return;
       }
 
@@ -33,21 +41,39 @@ export default function TVMode() {
     };
 
     updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
-    return () => clearInterval(interval);
+    countdownInterval.current = setInterval(updateCountdown, 1000);
+    
+    return () => {
+      if (countdownInterval.current) {
+        clearInterval(countdownInterval.current);
+        countdownInterval.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
+    dataInterval.current = setInterval(fetchData, 30000);
+    
+    return () => {
+      if (dataInterval.current) {
+        clearInterval(dataInterval.current);
+        dataInterval.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    cardInterval.current = setInterval(() => {
       setCurrentCard((prev) => (prev + 1) % 4);
     }, 12000);
-    return () => clearInterval(interval);
+    
+    return () => {
+      if (cardInterval.current) {
+        clearInterval(cardInterval.current);
+        cardInterval.current = null;
+      }
+    };
   }, []);
 
   const fetchData = async () => {

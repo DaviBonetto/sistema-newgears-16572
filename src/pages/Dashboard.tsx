@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -20,6 +20,8 @@ export default function Dashboard() {
   const [recentEvidences, setRecentEvidences] = useState<any[]>([]);
   const [recentMissions, setRecentMissions] = useState<any[]>([]);
 
+  const countdownInterval = useRef<NodeJS.Timeout | null>(null);
+
   useEffect(() => {
     const targetDate = new Date("2025-12-16T00:00:00");
     
@@ -29,6 +31,10 @@ export default function Dashboard() {
       
       if (diff <= 0) {
         setCountdown("Evento finalizado!");
+        if (countdownInterval.current) {
+          clearInterval(countdownInterval.current);
+          countdownInterval.current = null;
+        }
         return;
       }
 
@@ -41,8 +47,14 @@ export default function Dashboard() {
     };
 
     updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
-    return () => clearInterval(interval);
+    countdownInterval.current = setInterval(updateCountdown, 1000);
+    
+    return () => {
+      if (countdownInterval.current) {
+        clearInterval(countdownInterval.current);
+        countdownInterval.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {

@@ -20,19 +20,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Set up listener first
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
         
-        // Redirect to dashboard on successful sign in
+        // Handle navigation after state updates
         if (event === 'SIGNED_IN' && session) {
-          navigate('/dashboard');
+          setTimeout(() => navigate('/dashboard'), 0);
+        } else if (event === 'SIGNED_OUT') {
+          setTimeout(() => navigate('/'), 0);
         }
       }
     );
 
+    // Then check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
@@ -62,7 +66,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut();
+    if (!error) {
+      setSession(null);
+      setUser(null);
+    }
   };
 
   if (loading) {
