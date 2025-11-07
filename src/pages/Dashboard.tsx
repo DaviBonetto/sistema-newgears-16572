@@ -9,10 +9,12 @@ import { Progress } from "@/components/ui/progress";
 import { AlertCircle, Trophy, Upload, Calendar as CalendarIcon } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useNavigation } from "@/contexts/NavigationContext";
 
 export default function Dashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { lastPath } = useNavigation();
   const [countdown, setCountdown] = useState("");
   const [tasksStats, setTasksStats] = useState({ done: 0, total: 0 });
   const [urgentTasks, setUrgentTasks] = useState<any[]>([]);
@@ -21,6 +23,13 @@ export default function Dashboard() {
   const [recentMissions, setRecentMissions] = useState<any[]>([]);
 
   const countdownInterval = useRef<NodeJS.Timeout | null>(null);
+
+  // Restore last path on mount
+  useEffect(() => {
+    if (lastPath && lastPath !== "/dashboard" && lastPath !== "/auth" && lastPath !== "/profile-setup") {
+      navigate(lastPath, { replace: true });
+    }
+  }, []);
 
   useEffect(() => {
     const targetDate = new Date("2025-12-16T00:00:00");

@@ -12,20 +12,33 @@ interface NavigationContextType {
   setPageState: (pathname: string, state: Partial<NavigationState>) => void;
   clearPageState: (pathname: string) => void;
   clearAllStates: () => void;
+  lastPath: string | null;
+  setLastPath: (path: string) => void;
 }
 
 const NavigationContext = createContext<NavigationContextType | undefined>(undefined);
 
 export function NavigationProvider({ children }: { children: ReactNode }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [states, setStates] = useState<Record<string, NavigationState>>(() => {
     const saved = localStorage.getItem("navigation-states");
     return saved ? JSON.parse(saved) : {};
+  });
+  const [lastPath, setLastPathState] = useState<string | null>(() => {
+    return localStorage.getItem("last-navigation-path");
   });
 
   useEffect(() => {
     localStorage.setItem("navigation-states", JSON.stringify(states));
   }, [states]);
+
+  useEffect(() => {
+    if (location.pathname !== "/auth" && location.pathname !== "/profile-setup") {
+      localStorage.setItem("last-navigation-path", location.pathname);
+      setLastPathState(location.pathname);
+    }
+  }, [location.pathname]);
 
   const getPageState = (pathname: string) => {
     return states[pathname] || null;
@@ -53,11 +66,18 @@ export function NavigationProvider({ children }: { children: ReactNode }) {
   const clearAllStates = () => {
     setStates({});
     localStorage.removeItem("navigation-states");
+    localStorage.removeItem("last-navigation-path");
+    setLastPathState(null);
+  };
+
+  const setLastPath = (path: string) => {
+    localStorage.setItem("last-navigation-path", path);
+    setLastPathState(path);
   };
 
   return (
     <NavigationContext.Provider
-      value={{ getPageState, setPageState, clearPageState, clearAllStates }}
+      value={{ getPageState, setPageState, clearPageState, clearAllStates, lastPath, setLastPath }}
     >
       {children}
     </NavigationContext.Provider>

@@ -8,11 +8,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trophy, Trash2, Upload } from "lucide-react";
+import { Trophy } from "lucide-react";
 import { toast } from "sonner";
+import { MultiUpload } from "@/components/MultiUpload";
 
 type SectionType = "innovation" | "robot_design";
 type QuadrantType = "identify" | "design" | "create" | "iterate" | "communicate";
@@ -23,7 +23,6 @@ export default function FinalProject() {
   const [innovationData, setInnovationData] = useState<any>(null);
   const [robotDesignData, setRobotDesignData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
   
   useScrollPersistence(activeTab);
 
@@ -115,77 +114,54 @@ export default function FinalProject() {
     }
   };
 
-  const handleFileUpload = async (sectionType: SectionType, file: File) => {
+  const handleAttachmentsChange = async (
+    sectionType: SectionType,
+    attachments: any[]
+  ) => {
     if (!user) return;
-    setUploading(true);
-
-    const fileExt = file.name.split(".").pop();
-    const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-    const filePath = `${sectionType}/${fileName}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("final-project-files")
-      .upload(filePath, file);
-
-    if (uploadError) {
-      toast.error("Erro ao fazer upload");
-      setUploading(false);
-      return;
-    }
-
-    const { data: { publicUrl } } = supabase.storage
-      .from("final-project-files")
-      .getPublicUrl(filePath);
 
     const currentData = sectionType === "innovation" ? innovationData : robotDesignData;
-    const currentFiles = currentData?.attachments || [];
-    const updatedFiles = [...currentFiles, { url: publicUrl, name: file.name }];
 
-    if (currentData?.id) {
-      await supabase
-        .from("final_project")
-        .update({ attachments: updatedFiles })
-        .eq("id", currentData.id);
-    } else {
-      const { data } = await supabase
-        .from("final_project")
-        .insert({
-          section_type: sectionType,
-          attachments: updatedFiles,
-          created_by: user.id,
-        })
-        .select()
-        .single();
+    try {
+      if (currentData?.id) {
+        const { error } = await supabase
+          .from("final_project")
+          .update({ attachments: attachments as any })
+          .eq("id", currentData.id);
 
-      if (sectionType === "innovation") setInnovationData(data);
-      else setRobotDesignData(data);
+        if (error) throw error;
+      } else {
+        const { data, error } = await supabase
+          .from("final_project")
+          .insert([{
+            section_type: sectionType,
+            attachments: attachments as any,
+            created_by: user.id,
+          }])
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        if (sectionType === "innovation") {
+          setInnovationData(data);
+        } else {
+          setRobotDesignData(data);
+        }
+      }
+
+      // Update local state
+      if (sectionType === "innovation") {
+        setInnovationData({ ...currentData, attachments });
+      } else {
+        setRobotDesignData({ ...currentData, attachments });
+      }
+
+      toast.success("Anexos atualizados!");
+    } catch (error) {
+      console.error("Error updating attachments:", error);
+      toast.error("Erro ao atualizar anexos. Tente novamente.");
     }
-
-    toast.success("Upload concluído!");
-    fetchProjectData();
-    setUploading(false);
-  };
-
-  const handleDeleteFile = async (sectionType: SectionType, index: number) => {
-    const currentData = sectionType === "innovation" ? innovationData : robotDesignData;
-    if (!currentData?.id) return;
-
-    const currentFiles = currentData.attachments || [];
-    const fileToDelete = currentFiles[index];
-    
-    const urlParts = fileToDelete.url.split("/");
-    const filePath = `${sectionType}/${urlParts[urlParts.length - 1]}`;
-
-    await supabase.storage.from("final-project-files").remove([filePath]);
-
-    const updatedFiles = currentFiles.filter((_: any, i: number) => i !== index);
-    await supabase
-      .from("final_project")
-      .update({ attachments: updatedFiles })
-      .eq("id", currentData.id);
-
-    toast.success("Arquivo removido!");
-    fetchProjectData();
   };
 
   const renderQuadrant = (
@@ -277,46 +253,18 @@ export default function FinalProject() {
         </CardContent>
       </Card>
 
-      {/* Arquivos */}
+      {/* Anexos e Links */}
       <Card>
         <CardHeader>
-          <CardTitle>Arquivos Anexados</CardTitle>
+          <CardTitle>Anexos e Links</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label htmlFor={`${sectionType}-file-upload`}>Upload de Arquivo</Label>
-            <Input
-              id={`${sectionType}-file-upload`}
-              type="file"
-              accept="image/*,video/*,.pdf"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleFileUpload(sectionType, file);
-              }}
-              disabled={uploading}
-            />
-          </div>
-          <div className="space-y-2">
-            {(data?.attachments || []).map((file: any, index: number) => (
-              <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                <a
-                  href={file.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm text-primary hover:underline"
-                >
-                  {file.name}
-                </a>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleDeleteFile(sectionType, index)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
-          </div>
+        <CardContent>
+          <MultiUpload
+            bucket="final-project-files"
+            attachments={data?.attachments || []}
+            onUpdate={(attachments) => handleAttachmentsChange(sectionType, attachments)}
+            userId={user?.id || ""}
+          />
         </CardContent>
       </Card>
     </div>
