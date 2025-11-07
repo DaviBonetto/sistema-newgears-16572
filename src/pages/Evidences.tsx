@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useScrollPersistence } from "@/hooks/useScrollPersistence";
+import { MultiUpload } from "@/components/MultiUpload";
 import Layout from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Search, FileText, Download, Trash2 } from "lucide-react";
+import { Plus, Search, FileText, Download, Trash2, Edit, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -17,8 +19,15 @@ export default function Evidences() {
   const { user } = useAuth();
   const [evidences, setEvidences] = useState<any[]>([]);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isViewOpen, setIsViewOpen] = useState(false);
+  const [editingEvidence, setEditingEvidence] = useState<any>(null);
+  const [viewingEvidence, setViewingEvidence] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [attachments, setAttachments] = useState<any[]>([]);
+
+  useScrollPersistence();
 
   useEffect(() => {
     fetchEvidences();
@@ -61,32 +70,13 @@ export default function Evidences() {
 
     setUploading(true);
     const formData = new FormData(e.currentTarget);
-    const file = (formData.get("file") as File);
-
-    if (!file || file.size === 0) {
-      toast.error("Por favor, selecione um arquivo");
-      setUploading(false);
-      return;
-    }
-
-    const summary = formData.get("summary") as string;
-    if (summary.length < 50) {
-      toast.error("O resumo deve ter pelo menos 50 caracteres");
-      setUploading(false);
-      return;
-    }
-
-    const fileUrl = await handleUploadFile(file);
-    if (!fileUrl) {
-      setUploading(false);
-      return;
-    }
 
     const { error } = await supabase.from("evidences").insert({
       title: formData.get("title") as string,
-      summary: summary,
-      file_url: fileUrl,
-      file_type: file.type,
+      summary: formData.get("summary") as string,
+      file_url: attachments[0]?.url || "",
+      file_type: attachments[0]?.type || "link",
+      attachments: attachments,
       created_by: user.id,
     });
 
@@ -95,6 +85,35 @@ export default function Evidences() {
     } else {
       toast.success("Evidência criada com sucesso!");
       setIsCreateOpen(false);
+      setAttachments([]);
+      fetchEvidences();
+    }
+    setUploading(false);
+  };
+
+  const handleEditEvidence = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editingEvidence) return;
+
+    setUploading(true);
+    const formData = new FormData(e.currentTarget);
+
+    const { error } = await supabase
+      .from("evidences")
+      .update({
+        title: formData.get("title") as string,
+        summary: formData.get("summary") as string,
+        attachments: attachments,
+      })
+      .eq("id", editingEvidence.id);
+
+    if (error) {
+      toast.error("Erro ao atualizar evidência");
+    } else {
+      toast.success("Evidência atualizada!");
+      setIsEditOpen(false);
+      setEditingEvidence(null);
+      setAttachments([]);
       fetchEvidences();
     }
     setUploading(false);
@@ -151,29 +170,24 @@ export default function Evidences() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="summary">Resumo (mínimo 50 caracteres)</Label>
+                  <Label htmlFor="summary">Resumo</Label>
                   <Textarea
                     id="summary"
                     name="summary"
                     rows={4}
-                    minLength={50}
                     required
                     placeholder="Descreva a evidência em detalhes..."
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="file">Arquivo (obrigatório)</Label>
-                  <Input
-                    id="file"
-                    name="file"
-                    type="file"
-                    accept="image/*,video/*,.pdf"
-                    required
+                  <Label>Anexos e Links</Label>
+                  <MultiUpload
+                    bucket="evidences"
+                    attachments={attachments}
+                    onUpdate={setAttachments}
+                    userId={user?.id || ""}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Formatos aceitos: Imagens, vídeos ou PDF
-                  </p>
                 </div>
 
                 <div className="flex gap-2">
@@ -183,12 +197,132 @@ export default function Evidences() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setIsCreateOpen(false)}
+                    onClick={() => {
+                      setIsCreateOpen(false);
+                      setAttachments([]);
+                    }}
                   >
                     Cancelar
                   </Button>
                 </div>
               </form>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Editar Evidência</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleEditEvidence} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-title">Título</Label>
+                  <Input
+                    id="edit-title"
+                    name="title"
+                    defaultValue={editingEvidence?.title}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-summary">Resumo</Label>
+                  <Textarea
+                    id="edit-summary"
+                    name="summary"
+                    rows={4}
+                    defaultValue={editingEvidence?.summary}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Anexos e Links</Label>
+                  <MultiUpload
+                    bucket="evidences"
+                    attachments={attachments}
+                    onUpdate={setAttachments}
+                    userId={user?.id || ""}
+                  />
+                </div>
+
+                <div className="flex gap-2">
+                  <Button type="submit" className="flex-1" disabled={uploading}>
+                    {uploading ? "Salvando..." : "Salvar Alterações"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setIsEditOpen(false);
+                      setEditingEvidence(null);
+                      setAttachments([]);
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isViewOpen} onOpenChange={setIsViewOpen}>
+            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>{viewingEvidence?.title}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div>
+                  <h3 className="mb-2 font-semibold">Resumo</h3>
+                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                    {viewingEvidence?.summary}
+                  </p>
+                </div>
+
+                {viewingEvidence?.attachments && viewingEvidence.attachments.length > 0 && (
+                  <div>
+                    <h3 className="mb-2 font-semibold">Anexos</h3>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {viewingEvidence.attachments.map((att: any, idx: number) => (
+                        <div key={idx} className="overflow-hidden rounded-lg border">
+                          {att.type.startsWith("image/") ? (
+                            <img
+                              src={att.url}
+                              alt={att.name}
+                              className="h-48 w-full object-cover"
+                            />
+                          ) : att.type.startsWith("video/") ? (
+                            <video src={att.url} className="w-full" controls />
+                          ) : (
+                            <a
+                              href={att.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 p-3 hover:bg-muted"
+                            >
+                              <FileText className="h-5 w-5" />
+                              <span className="flex-1 truncate">{att.name}</span>
+                              <Download className="h-4 w-4" />
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="border-t pt-4 text-sm text-muted-foreground">
+                  <p>Criado por: {viewingEvidence?.creator?.full_name}</p>
+                  <p>
+                    Em:{" "}
+                    {viewingEvidence?.created_at &&
+                      formatDistanceToNow(new Date(viewingEvidence.created_at), {
+                        addSuffix: true,
+                        locale: ptBR,
+                      })}
+                  </p>
+                </div>
+              </div>
             </DialogContent>
           </Dialog>
         </div>
@@ -210,23 +344,40 @@ export default function Evidences() {
                 <div className="flex items-start justify-between">
                   <FileText className="h-5 w-5 text-primary" />
                   <div className="flex gap-1">
-                    <a
-                      href={evidence.file_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-muted-foreground hover:text-foreground"
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => {
+                        setViewingEvidence(evidence);
+                        setIsViewOpen(true);
+                      }}
                     >
-                      <Download className="h-4 w-4" />
-                    </a>
+                      <Eye className="h-4 w-4" />
+                    </Button>
                     {user?.id === evidence.created_by && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6"
-                        onClick={() => handleDeleteEvidence(evidence.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => {
+                            setEditingEvidence(evidence);
+                            setAttachments(evidence.attachments || []);
+                            setIsEditOpen(true);
+                          }}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => handleDeleteEvidence(evidence.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </>
                     )}
                   </div>
                 </div>

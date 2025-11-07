@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTabPersistence } from "@/hooks/useTabPersistence";
+import { useScrollPersistence } from "@/hooks/useScrollPersistence";
 import Layout from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, GripVertical } from "lucide-react";
+import { Plus, Trash2, GripVertical, Edit } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
@@ -65,9 +67,11 @@ function DroppableColumn({ column, children }: DroppableColumnProps) {
 interface TaskCardProps {
   task: any;
   onDelete: (id: string) => void;
+  onEdit: (task: any) => void;
+  profiles: any[];
 }
 
-function TaskCard({ task, onDelete }: TaskCardProps) {
+function TaskCard({ task, onDelete, onEdit, profiles }: TaskCardProps) {
   const {
     attributes,
     listeners,
@@ -120,6 +124,17 @@ function TaskCard({ task, onDelete }: TaskCardProps) {
               className="h-6 w-6"
               onClick={(e) => {
                 e.stopPropagation();
+                onEdit(task);
+              }}
+            >
+              <Edit className="h-3 w-3" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6"
+              onClick={(e) => {
+                e.stopPropagation();
                 onDelete(task.id);
               }}
             >
@@ -132,10 +147,17 @@ function TaskCard({ task, onDelete }: TaskCardProps) {
             {task.description}
           </p>
         )}
-        {task.responsible && (
-          <p className="text-xs text-muted-foreground ml-5">
-            {task.responsible.full_name}
-          </p>
+        {task.responsible_ids && task.responsible_ids.length > 0 && (
+          <div className="mt-1.5 ml-5 flex flex-wrap gap-1">
+            {task.responsible_ids.map((id: string) => {
+              const profile = profiles.find((p) => p.id === id);
+              return profile ? (
+                <Badge key={id} variant="outline" className="text-xs">
+                  {profile.full_name}
+                </Badge>
+              ) : null;
+            })}
+          </div>
         )}
         {task.evidence_required && (
           <Badge variant="outline" className="mt-1.5 text-xs ml-5">
@@ -152,9 +174,15 @@ export default function Tasks() {
   const [tasks, setTasks] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<any[]>([]);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<any>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [selectedResponsibles, setSelectedResponsibles] = useState<string[]>([]);
+
+  useTabPersistence("todo");
+  useScrollPersistence();
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -193,7 +221,7 @@ export default function Tasks() {
       description: formData.get("description") as string,
       priority: formData.get("priority") as string,
       status: "todo",
-      responsible_id: formData.get("responsible") as string || null,
+      responsible_ids: selectedResponsibles.length > 0 ? selectedResponsibles : null,
       deadline: formData.get("deadline") ? new Date(formData.get("deadline") as string).toISOString() : null,
       evidence_required: formData.get("evidence_required") === "on",
       created_by: user.id,
@@ -204,6 +232,36 @@ export default function Tasks() {
     } else {
       toast.success("Tarefa criada com sucesso!");
       setIsCreateOpen(false);
+      setSelectedResponsibles([]);
+      fetchTasks();
+    }
+  };
+
+  const handleEditTask = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editingTask) return;
+
+    const formData = new FormData(e.currentTarget);
+
+    const { error } = await supabase
+      .from("tasks")
+      .update({
+        title: formData.get("title") as string,
+        description: formData.get("description") as string,
+        priority: formData.get("priority") as string,
+        responsible_ids: selectedResponsibles.length > 0 ? selectedResponsibles : null,
+        deadline: formData.get("deadline") ? new Date(formData.get("deadline") as string).toISOString() : null,
+        evidence_required: formData.get("evidence_required") === "on",
+      })
+      .eq("id", editingTask.id);
+
+    if (error) {
+      toast.error("Erro ao atualizar tarefa");
+    } else {
+      toast.success("Tarefa atualizada!");
+      setIsEditOpen(false);
+      setEditingTask(null);
+      setSelectedResponsibles([]);
       fetchTasks();
     }
   };
@@ -342,38 +400,45 @@ export default function Tasks() {
                   <Textarea id="description" name="description" rows={3} />
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="priority">Prioridade</Label>
-                    <Select name="priority" required>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {priorities.map((p) => (
-                          <SelectItem key={p.value} value={p.value}>
-                            {p.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="space-y-2">
+                  <Label htmlFor="priority">Prioridade</Label>
+                  <Select name="priority" required>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {priorities.map((p) => (
+                        <SelectItem key={p.value} value={p.value}>
+                          {p.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="responsible">Responsável</Label>
-                    <Select name="responsible">
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione (opcional)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {profiles.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.full_name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                <div className="space-y-2">
+                  <Label>Responsáveis (múltiplos)</Label>
+                  <div className="flex flex-wrap gap-2 rounded-md border p-2">
+                    {profiles.map((p) => (
+                      <Badge
+                        key={p.id}
+                        variant={selectedResponsibles.includes(p.id) ? "default" : "outline"}
+                        className="cursor-pointer"
+                        onClick={() => {
+                          setSelectedResponsibles((prev) =>
+                            prev.includes(p.id)
+                              ? prev.filter((id) => id !== p.id)
+                              : [...prev, p.id]
+                          );
+                        }}
+                      >
+                        {p.full_name}
+                      </Badge>
+                    ))}
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    Clique para selecionar/remover responsáveis
+                  </p>
                 </div>
 
                 <div className="space-y-2">
@@ -394,6 +459,116 @@ export default function Tasks() {
                     type="button"
                     variant="outline"
                     onClick={() => setIsCreateOpen(false)}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>Editar Meta</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleEditTask} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-title">Título</Label>
+                  <Input
+                    id="edit-title"
+                    name="title"
+                    defaultValue={editingTask?.title}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-description">Descrição</Label>
+                  <Textarea
+                    id="edit-description"
+                    name="description"
+                    rows={3}
+                    defaultValue={editingTask?.description}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-priority">Prioridade</Label>
+                  <Select name="priority" defaultValue={editingTask?.priority} required>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {priorities.map((p) => (
+                        <SelectItem key={p.value} value={p.value}>
+                          {p.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Responsáveis (múltiplos)</Label>
+                  <div className="flex flex-wrap gap-2 rounded-md border p-2">
+                    {profiles.map((p) => (
+                      <Badge
+                        key={p.id}
+                        variant={selectedResponsibles.includes(p.id) ? "default" : "outline"}
+                        className="cursor-pointer"
+                        onClick={() => {
+                          setSelectedResponsibles((prev) =>
+                            prev.includes(p.id)
+                              ? prev.filter((id) => id !== p.id)
+                              : [...prev, p.id]
+                          );
+                        }}
+                      >
+                        {p.full_name}
+                      </Badge>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Clique para selecionar/remover responsáveis
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-deadline">Prazo (Opcional)</Label>
+                  <Input
+                    id="edit-deadline"
+                    name="deadline"
+                    type="datetime-local"
+                    defaultValue={
+                      editingTask?.deadline
+                        ? new Date(editingTask.deadline).toISOString().slice(0, 16)
+                        : ""
+                    }
+                  />
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="edit-evidence"
+                    name="evidence_required"
+                    defaultChecked={editingTask?.evidence_required}
+                  />
+                  <Label htmlFor="edit-evidence">Evidência obrigatória ao concluir</Label>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button type="submit" className="flex-1">
+                    Salvar Alterações
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setIsEditOpen(false);
+                      setEditingTask(null);
+                      setSelectedResponsibles([]);
+                    }}
                   >
                     Cancelar
                   </Button>
@@ -436,6 +611,12 @@ export default function Tasks() {
                         <TaskCard
                           key={task.id}
                           task={task}
+                          profiles={profiles}
+                          onEdit={(task) => {
+                            setEditingTask(task);
+                            setSelectedResponsibles(task.responsible_ids || []);
+                            setIsEditOpen(true);
+                          }}
                           onDelete={(id) => {
                             setTaskToDelete(id);
                             setDeleteDialogOpen(true);

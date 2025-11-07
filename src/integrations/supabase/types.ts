@@ -234,33 +234,39 @@ export type Database = {
       }
       evidences: {
         Row: {
+          attachments: Json | null
           created_at: string | null
           created_by: string
           file_type: string | null
           file_url: string
           id: string
+          links: Json | null
           project_id: string | null
           summary: string
           task_id: string | null
           title: string
         }
         Insert: {
+          attachments?: Json | null
           created_at?: string | null
           created_by: string
           file_type?: string | null
           file_url: string
           id?: string
+          links?: Json | null
           project_id?: string | null
           summary: string
           task_id?: string | null
           title: string
         }
         Update: {
+          attachments?: Json | null
           created_at?: string | null
           created_by?: string
           file_type?: string | null
           file_url?: string
           id?: string
+          links?: Json | null
           project_id?: string | null
           summary?: string
           task_id?: string | null
@@ -457,6 +463,7 @@ export type Database = {
       }
       methodologies: {
         Row: {
+          attachments: Json | null
           created_at: string | null
           created_by: string | null
           description: string
@@ -468,6 +475,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          attachments?: Json | null
           created_at?: string | null
           created_by?: string | null
           description: string
@@ -479,6 +487,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          attachments?: Json | null
           created_at?: string | null
           created_by?: string | null
           description?: string
@@ -703,6 +712,7 @@ export type Database = {
           id: string
           priority: string | null
           responsible_id: string | null
+          responsible_ids: string[] | null
           status: string
           title: string
           updated_at: string | null
@@ -716,6 +726,7 @@ export type Database = {
           id?: string
           priority?: string | null
           responsible_id?: string | null
+          responsible_ids?: string[] | null
           status?: string
           title: string
           updated_at?: string | null
@@ -729,6 +740,7 @@ export type Database = {
           id?: string
           priority?: string | null
           responsible_id?: string | null
+          responsible_ids?: string[] | null
           status?: string
           title?: string
           updated_at?: string | null

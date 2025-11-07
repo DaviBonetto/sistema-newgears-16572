@@ -2,12 +2,13 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useScrollPersistence } from "@/hooks/useScrollPersistence";
+import { MultiUpload } from "@/components/MultiUpload";
 import Layout from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Trophy, Upload, X, Plus, Trash2 } from "lucide-react";
+import { Trophy, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 
@@ -70,6 +71,7 @@ export default function Innovation() {
 
   const [mediaFiles, setMediaFiles] = useState<any[]>([]);
   const [customSections, setCustomSections] = useState<any[]>([]);
+  const [sectionAttachments, setSectionAttachments] = useState<{ [key: string]: any[] }>({});
 
   const defaultSections = [
     { key: "problem", label: "Problema Identificado" },
@@ -113,6 +115,10 @@ export default function Innovation() {
   const handleRemoveFile = (index: number) => {
     setMediaFiles(mediaFiles.filter((_, i) => i !== index));
     toast.success("Arquivo removido!");
+  };
+
+  const updateSectionAttachments = (sectionKey: string, attachments: any[]) => {
+    setSectionAttachments((prev) => ({ ...prev, [sectionKey]: attachments }));
   };
 
   const handleAddSection = () => {
@@ -203,59 +209,13 @@ export default function Innovation() {
 
                     {/* Media Upload */}
                     <div className="space-y-2">
-                      <Label>Imagens e Vídeos</Label>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            const input = document.createElement("input");
-                            input.type = "file";
-                            input.accept = "image/*,video/*";
-                            input.onchange = (e: any) => {
-                              const file = e.target.files[0];
-                              if (file) handleFileUpload(file, section.key);
-                            };
-                            input.click();
-                          }}
-                        >
-                          <Upload className="mr-2 h-4 w-4" />
-                          Adicionar Mídia
-                        </Button>
-                      </div>
-
-                      {/* Display Media Files for this section */}
-                      <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
-                        {mediaFiles
-                          .filter((file) => file.section === section.key)
-                          .map((file, index) => (
-                            <div
-                              key={index}
-                              className="group relative overflow-hidden rounded-lg border"
-                            >
-                              {file.type.startsWith("image/") ? (
-                                <img
-                                  src={file.url}
-                                  alt={file.name}
-                                  className="h-32 w-full object-cover"
-                                />
-                              ) : (
-                                <video
-                                  src={file.url}
-                                  className="h-32 w-full object-cover"
-                                  controls
-                                />
-                              )}
-                              <button
-                                onClick={() => handleRemoveFile(index)}
-                                className="absolute right-1 top-1 rounded-full bg-destructive p-1 text-destructive-foreground opacity-0 transition-opacity group-hover:opacity-100"
-                              >
-                                <X className="h-4 w-4" />
-                              </button>
-                            </div>
-                          ))}
-                      </div>
+                      <Label>Imagens, Vídeos e Links</Label>
+                      <MultiUpload
+                        bucket="evidences"
+                        attachments={sectionAttachments[section.key] || []}
+                        onUpdate={(atts) => updateSectionAttachments(section.key, atts)}
+                        userId={user?.id || ""}
+                      />
                     </div>
                   </div>
                 </CardContent>
