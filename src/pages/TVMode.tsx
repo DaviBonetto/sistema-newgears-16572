@@ -2,7 +2,8 @@ import { useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowLeft, Trophy, Clock, Target, AlertCircle } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { ArrowLeft, Trophy, Clock, Target, AlertCircle, TrendingUp, Users, Zap } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -12,6 +13,8 @@ export default function TVMode() {
   const [nextEvent, setNextEvent] = useState<any>(null);
   const [avgMissionTime, setAvgMissionTime] = useState<number>(0);
   const [urgentTasks, setUrgentTasks] = useState<any[]>([]);
+  const [taskProgress, setTaskProgress] = useState({ done: 0, total: 0 });
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [currentCard, setCurrentCard] = useState(0);
 
   const countdownInterval = useRef<NodeJS.Timeout | null>(null);
@@ -36,8 +39,9 @@ export default function TVMode() {
 
       const days = Math.floor(diff / (1000 * 60 * 60 * 24));
       const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
 
-      setCountdown(`${days} DIAS ${hours}H`);
+      setCountdown(`${days}D ${hours}H ${minutes}M`);
     };
 
     updateCountdown();
@@ -53,7 +57,7 @@ export default function TVMode() {
 
   useEffect(() => {
     fetchData();
-    dataInterval.current = setInterval(fetchData, 30000);
+    dataInterval.current = setInterval(fetchData, 20000);
     
     return () => {
       if (dataInterval.current) {
@@ -65,8 +69,8 @@ export default function TVMode() {
 
   useEffect(() => {
     cardInterval.current = setInterval(() => {
-      setCurrentCard((prev) => (prev + 1) % 4);
-    }, 12000);
+      setCurrentCard((prev) => (prev + 1) % 5);
+    }, 10000);
     
     return () => {
       if (cardInterval.current) {
@@ -80,7 +84,7 @@ export default function TVMode() {
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-    const [profilesData, nextEventData, missionsData, tasksData] = await Promise.all([
+    const [profilesData, nextEventData, missionsData, tasksData, allTasksData, activityData] = await Promise.all([
       supabase
         .from("profiles")
         .select("*, tasks:tasks(status, updated_at), evidences:evidences(created_at)")
@@ -98,6 +102,12 @@ export default function TVMode() {
         .select("*, responsible:responsible_id(*)")
         .eq("priority", "urgent")
         .neq("status", "done")
+        .limit(5),
+      supabase.from("tasks").select("status"),
+      supabase
+        .from("activity_log")
+        .select("*")
+        .order("created_at", { ascending: false })
         .limit(5),
     ]);
 
@@ -135,38 +145,55 @@ export default function TVMode() {
     if (tasksData.data) {
       setUrgentTasks(tasksData.data);
     }
+
+    if (allTasksData.data) {
+      const done = allTasksData.data.filter((t) => t.status === "done").length;
+      setTaskProgress({ done, total: allTasksData.data.length });
+    }
+
+    if (activityData.data) {
+      setRecentActivity(activityData.data);
+    }
   };
+
+  const progressPercentage = taskProgress.total > 0
+    ? (taskProgress.done / taskProgress.total) * 100
+    : 0;
 
   const cards = [
     {
       title: "TOP 3 DA SEMANA",
       icon: Trophy,
+      gradient: "from-secondary/20 to-secondary/5",
       content: (
         <div className="space-y-4">
           {topContributors.map((contributor, index) => (
             <div
               key={contributor.id}
-              className="flex items-center gap-4 rounded-lg bg-background/50 p-4"
+              className="flex items-center gap-4 rounded-xl bg-background/80 backdrop-blur p-4 border border-primary/20 hover:border-primary/40 transition-all"
             >
               <div
-                className={`flex h-12 w-12 items-center justify-center rounded-full text-2xl font-bold ${
+                className={`flex h-16 w-16 items-center justify-center rounded-full text-3xl font-bold shadow-lg ${
                   index === 0
-                    ? "bg-secondary text-secondary-foreground"
-                    : "bg-muted text-muted-foreground"
+                    ? "bg-gradient-to-br from-secondary to-secondary/80 text-secondary-foreground animate-pulse"
+                    : index === 1
+                    ? "bg-gradient-to-br from-primary/60 to-primary/40 text-primary-foreground"
+                    : "bg-gradient-to-br from-muted to-muted/60 text-muted-foreground"
                 }`}
               >
-                {index + 1}
+                {index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉"}
               </div>
               <div className="flex-1">
-                <p className="text-xl font-bold">{contributor.full_name}</p>
-                <p className="text-muted-foreground">
-                  {contributor.score} contribuições esta semana
+                <p className="text-2xl font-bold">{contributor.full_name}</p>
+                <p className="text-lg text-muted-foreground flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-secondary" />
+                  {contributor.score} contribuições
                 </p>
               </div>
             </div>
           ))}
           {topContributors.length === 0 && (
-            <p className="text-center text-muted-foreground py-8">
+            <p className="text-center text-muted-foreground py-12 text-xl">
               Nenhuma contribuição esta semana
             </p>
           )}
@@ -176,23 +203,27 @@ export default function TVMode() {
     {
       title: "PRÓXIMO EVENTO",
       icon: Clock,
+      gradient: "from-primary/20 to-primary/5",
       content: nextEvent ? (
         <div className="space-y-4">
-          <div className="rounded-lg bg-primary/10 p-6 border border-primary/30">
-            <h3 className="text-3xl font-bold mb-2">{nextEvent.title}</h3>
-            <p className="text-xl text-muted-foreground mb-4">
-              {nextEvent.description}
-            </p>
-            <p className="text-2xl font-bold text-primary">
+          <div className="rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 p-8 border-2 border-primary/30 shadow-xl">
+            <h3 className="text-4xl font-bold mb-3 text-primary">{nextEvent.title}</h3>
+            {nextEvent.description && (
+              <p className="text-xl text-muted-foreground mb-6">
+                {nextEvent.description}
+              </p>
+            )}
+            <div className="flex items-center gap-3 text-3xl font-bold text-primary">
+              <Clock className="h-8 w-8" />
               {formatDistanceToNow(new Date(nextEvent.event_date), {
                 addSuffix: true,
                 locale: ptBR,
               })}
-            </p>
+            </div>
           </div>
         </div>
       ) : (
-        <p className="text-center text-muted-foreground py-8">
+        <p className="text-center text-muted-foreground py-12 text-xl">
           Nenhum evento próximo agendado
         </p>
       ),
@@ -200,13 +231,14 @@ export default function TVMode() {
     {
       title: "TEMPO MÉDIO DE MISSÕES",
       icon: Target,
+      gradient: "from-accent/20 to-accent/5",
       content: (
         <div className="flex items-center justify-center py-12">
           <div className="text-center">
-            <p className="text-7xl font-bold text-primary mb-4">
+            <p className="text-8xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-4">
               {avgMissionTime > 0 ? avgMissionTime.toFixed(1) : "--"}
             </p>
-            <p className="text-2xl text-muted-foreground">segundos</p>
+            <p className="text-3xl text-muted-foreground">segundos</p>
           </div>
         </div>
       ),
@@ -214,24 +246,47 @@ export default function TVMode() {
     {
       title: "TAREFAS URGENTES",
       icon: AlertCircle,
+      gradient: "from-destructive/20 to-destructive/5",
       content: (
         <div className="space-y-3">
           {urgentTasks.map((task) => (
             <div
               key={task.id}
-              className="rounded-lg border border-destructive/20 bg-destructive/5 p-4"
+              className="rounded-xl border-2 border-destructive/30 bg-destructive/10 p-5 hover:bg-destructive/15 transition-all"
             >
-              <p className="text-xl font-bold mb-1">{task.title}</p>
-              <p className="text-muted-foreground">
+              <p className="text-2xl font-bold mb-2 text-destructive">{task.title}</p>
+              <p className="text-lg text-muted-foreground flex items-center gap-2">
+                <Users className="h-5 w-5" />
                 {task.responsible?.full_name || "Sem responsável"}
               </p>
             </div>
           ))}
           {urgentTasks.length === 0 && (
-            <p className="text-center text-muted-foreground py-8">
-              Nenhuma tarefa urgente no momento
+            <p className="text-center text-muted-foreground py-12 text-xl">
+              ✅ Nenhuma tarefa urgente no momento
             </p>
           )}
+        </div>
+      ),
+    },
+    {
+      title: "PROGRESSO DE TAREFAS",
+      icon: TrendingUp,
+      gradient: "from-green-500/20 to-green-500/5",
+      content: (
+        <div className="space-y-6 py-8">
+          <div className="text-center">
+            <p className="text-7xl font-bold text-primary mb-2">
+              {taskProgress.done}/{taskProgress.total}
+            </p>
+            <p className="text-2xl text-muted-foreground">tarefas concluídas</p>
+          </div>
+          <div className="space-y-3 px-8">
+            <Progress value={progressPercentage} className="h-6" />
+            <p className="text-center text-3xl font-bold text-primary">
+              {progressPercentage.toFixed(1)}% completo
+            </p>
+          </div>
         </div>
       ),
     },
@@ -242,45 +297,49 @@ export default function TVMode() {
 
   return (
     <div
-      className="min-h-screen bg-background text-foreground p-8"
+      className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 text-foreground p-8"
       style={{
         fontFamily: "Inter, sans-serif",
         fontWeight: 600,
-        letterSpacing: "-0.07em",
+        letterSpacing: "-0.05em",
       }}
     >
-      <div className="space-y-8">
+      <div className="space-y-8 animate-fade-in">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border pb-6">
+        <div className="flex items-center justify-between border-b-2 border-primary/30 pb-6">
           <Link to="/dashboard">
-            <button className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
-              <ArrowLeft className="h-5 w-5" />
-              <span className="text-sm">Voltar</span>
+            <button className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-all hover:scale-105">
+              <ArrowLeft className="h-6 w-6" />
+              <span className="text-lg">Voltar</span>
             </button>
           </Link>
-          <h1 className="text-4xl font-bold">SYSTEM GEARS - MODO TV</h1>
-          <div className="w-24" />
+          <h1 className="text-5xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+            SYSTEM GEARS - MODO TV
+          </h1>
+          <div className="w-32" />
         </div>
 
         {/* Countdown */}
-        <div className="rounded-2xl bg-gradient-to-r from-primary/20 to-secondary/20 p-8 text-center border-2 border-primary">
-          <p className="text-sm text-muted-foreground mb-2">
-            CONTAGEM REGRESSIVA PARA O CAMPEONATO
+        <div className="rounded-3xl bg-gradient-to-r from-primary/20 via-secondary/20 to-primary/20 p-10 text-center border-4 border-primary shadow-2xl animate-pulse">
+          <p className="text-lg text-muted-foreground mb-3 uppercase tracking-wider">
+            Contagem Regressiva para o Campeonato
           </p>
-          <p className="text-6xl font-bold text-primary tracking-tight">
+          <p className="text-8xl font-bold bg-gradient-to-r from-primary via-secondary to-primary bg-clip-text text-transparent tracking-tight mb-3">
             {countdown}
           </p>
-          <p className="text-lg text-muted-foreground mt-2">
-            16 DE DEZEMBRO DE 2025
+          <p className="text-2xl text-muted-foreground font-semibold">
+            16 de Dezembro de 2025
           </p>
         </div>
 
         {/* Rotating Card */}
-        <Card className="border-2 border-primary">
-          <CardContent className="p-8">
-            <div className="mb-6 flex items-center gap-3">
-              <IconComponent className="h-8 w-8 text-primary" />
-              <h2 className="text-3xl font-bold">
+        <Card className={`border-4 border-primary shadow-2xl bg-gradient-to-br ${CurrentCardComponent.gradient} animate-scale-in`}>
+          <CardContent className="p-10">
+            <div className="mb-8 flex items-center gap-4">
+              <div className="rounded-2xl bg-primary/20 p-4">
+                <IconComponent className="h-10 w-10 text-primary" />
+              </div>
+              <h2 className="text-4xl font-bold">
                 {CurrentCardComponent.title}
               </h2>
             </div>
@@ -288,12 +347,22 @@ export default function TVMode() {
           </CardContent>
         </Card>
 
-        {/* Footer */}
-        <div className="border-t border-border pt-6 text-center">
-          <p className="text-sm text-muted-foreground">
-            Atualização automática a cada 30 segundos • Cards rotacionam a cada
-            12 segundos
-          </p>
+        {/* Footer with Activity Indicators */}
+        <div className="border-t-2 border-primary/30 pt-6 space-y-4">
+          <div className="flex items-center justify-center gap-6 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <div className="h-3 w-3 rounded-full bg-green-500 animate-pulse" />
+              <span>Ao vivo</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              <span>Atualiza a cada 20s</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Zap className="h-4 w-4" />
+              <span>Cards trocam a cada 10s</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

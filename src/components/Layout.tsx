@@ -2,6 +2,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { GlobalEditButton } from "@/components/GlobalEditButton";
 import { useState, useEffect } from "react";
 import {
   LayoutDashboard,
@@ -169,6 +170,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         )}
       >
         <div className="mx-auto max-w-7xl p-6">{children}</div>
+        <GlobalEditButton />
       </main>
     </div>
   );

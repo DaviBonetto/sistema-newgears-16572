@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useScrollPersistence } from "@/hooks/useScrollPersistence";
 import Layout from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,19 +9,29 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Lightbulb, Trash2 } from "lucide-react";
+import { Plus, Lightbulb, Trash2, Search, ExternalLink, Filter } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function Methodologies() {
   const { user } = useAuth();
   const [methodologies, setMethodologies] = useState<any[]>([]);
+  const [filteredMethodologies, setFilteredMethodologies] = useState<any[]>([]);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedTag, setSelectedTag] = useState<string>("all");
+  
+  useScrollPersistence();
 
   useEffect(() => {
     fetchMethodologies();
   }, []);
+
+  useEffect(() => {
+    filterMethodologies();
+  }, [methodologies, searchQuery, selectedTag]);
 
   const fetchMethodologies = async () => {
     const { data } = await supabase
@@ -28,6 +39,34 @@ export default function Methodologies() {
       .select("*, creator:created_by(*)")
       .order("created_at", { ascending: false });
     setMethodologies(data || []);
+  };
+
+  const filterMethodologies = () => {
+    let filtered = methodologies;
+
+    // Filter by search query
+    if (searchQuery) {
+      filtered = filtered.filter(
+        (m) =>
+          m.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          m.description.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    // Filter by tag
+    if (selectedTag !== "all") {
+      filtered = filtered.filter((m) => m.tags?.includes(selectedTag));
+    }
+
+    setFilteredMethodologies(filtered);
+  };
+
+  const getAllTags = () => {
+    const tagsSet = new Set<string>();
+    methodologies.forEach((m) => {
+      m.tags?.forEach((tag: string) => tagsSet.add(tag));
+    });
+    return Array.from(tagsSet);
   };
 
   const handleUploadImage = async (file: File) => {
@@ -120,9 +159,12 @@ export default function Methodologies() {
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold">Metodologias do Time</h1>
+            <h1 className="flex items-center gap-2 text-3xl font-bold">
+              <Lightbulb className="h-8 w-8 text-secondary" />
+              Metodologias
+            </h1>
             <p className="text-muted-foreground">
-              Ferramentário visual e técnicas de trabalho
+              Banco de conhecimento de metodologias aplicadas
             </p>
           </div>
           <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
@@ -134,9 +176,9 @@ export default function Methodologies() {
             </DialogTrigger>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
-                <DialogTitle>Adicionar Metodologia</DialogTitle>
+                <DialogTitle>Adicionar Nova Metodologia</DialogTitle>
                 <DialogDescription>
-                  Documente uma técnica ou ferramenta visual do time
+                  Registre uma nova metodologia aplicada no projeto
                 </DialogDescription>
               </DialogHeader>
               <form onSubmit={handleCreateMethodology} className="space-y-4">
@@ -147,16 +189,25 @@ export default function Methodologies() {
 
                 <div className="space-y-2">
                   <Label htmlFor="description">Descrição</Label>
-                  <Textarea id="description" name="description" rows={4} required />
+                  <Textarea
+                    id="description"
+                    name="description"
+                    rows={4}
+                    required
+                  />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="origin">Origem/Referência</Label>
+                  <Label htmlFor="origin">Origem / Link Externo</Label>
                   <Input
                     id="origin"
                     name="origin"
-                    placeholder="Ex: Gerado no Napkin, Canva..."
+                    type="url"
+                    placeholder="https://exemplo.com"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Link para documentação ou fonte externa
+                  </p>
                 </div>
 
                 <div className="space-y-2">
@@ -164,21 +215,18 @@ export default function Methodologies() {
                   <Input
                     id="tags"
                     name="tags"
-                    placeholder="Organização, Prototipagem, Pesquisa..."
+                    placeholder="design thinking, prototipagem, teste"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="image">Imagem Ilustrativa (opcional)</Label>
+                  <Label htmlFor="image">Imagem (opcional)</Label>
                   <Input id="image" name="image" type="file" accept="image/*" />
-                  <p className="text-xs text-muted-foreground">
-                    Upload manual de imagem criada em ferramentas externas
-                  </p>
                 </div>
 
                 <div className="flex gap-2">
                   <Button type="submit" className="flex-1" disabled={uploading}>
-                    {uploading ? "Salvando..." : "Criar Metodologia"}
+                    {uploading ? "Enviando..." : "Criar Metodologia"}
                   </Button>
                   <Button
                     type="button"
@@ -193,9 +241,49 @@ export default function Methodologies() {
           </Dialog>
         </div>
 
+        {/* Filters */}
+        <Card>
+          <CardContent className="pt-6">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="search">
+                  <Search className="inline h-4 w-4 mr-2" />
+                  Buscar
+                </Label>
+                <Input
+                  id="search"
+                  placeholder="Buscar metodologias..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="tag-filter">
+                  <Filter className="inline h-4 w-4 mr-2" />
+                  Filtrar por Tag
+                </Label>
+                <Select value={selectedTag} onValueChange={setSelectedTag}>
+                  <SelectTrigger id="tag-filter">
+                    <SelectValue placeholder="Todas as tags" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas as tags</SelectItem>
+                    {getAllTags().map((tag) => (
+                      <SelectItem key={tag} value={tag}>
+                        {tag}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Methodologies Grid */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {methodologies.map((methodology) => (
-            <Card key={methodology.id} className="overflow-hidden">
+          {filteredMethodologies.map((methodology) => (
+            <Card key={methodology.id} className="overflow-hidden hover:shadow-lg transition-shadow">
               {methodology.image_url && (
                 <div className="aspect-video w-full overflow-hidden bg-muted">
                   <img
@@ -206,46 +294,71 @@ export default function Methodologies() {
                 </div>
               )}
               <CardHeader>
-                <div className="flex items-start justify-between">
-                  <Lightbulb className="h-5 w-5 text-secondary" />
+                <CardTitle className="flex items-start justify-between gap-2">
+                  <span className="line-clamp-2">{methodology.title}</span>
                   <Button
-                    variant="ghost"
                     size="icon"
-                    onClick={() => handleDeleteMethodology(methodology.id, methodology.image_url)}
+                    variant="ghost"
+                    onClick={() =>
+                      handleDeleteMethodology(methodology.id, methodology.image_url)
+                    }
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
-                </div>
-                <CardTitle className="text-lg">{methodology.title}</CardTitle>
+                </CardTitle>
               </CardHeader>
-              <CardContent>
-                <p className="mb-4 text-sm text-muted-foreground">
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground line-clamp-3">
                   {methodology.description}
                 </p>
+
                 {methodology.origin && (
-                  <p className="mb-3 text-xs text-muted-foreground">
-                    Origem: {methodology.origin}
-                  </p>
+                  <a
+                    href={methodology.origin}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-sm text-primary hover:underline"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Ver fonte externa
+                  </a>
                 )}
+
                 {methodology.tags && methodology.tags.length > 0 && (
                   <div className="flex flex-wrap gap-1">
-                    {methodology.tags.map((tag: string, index: number) => (
-                      <Badge key={index} variant="secondary" className="text-xs">
+                    {methodology.tags.map((tag: string) => (
+                      <Badge key={tag} variant="secondary" className="text-xs">
                         {tag}
                       </Badge>
                     ))}
                   </div>
                 )}
+
+                {methodology.creator && (
+                  <p className="text-xs text-muted-foreground">
+                    Por: {methodology.creator.full_name}
+                  </p>
+                )}
               </CardContent>
             </Card>
           ))}
-          {methodologies.length === 0 && (
-            <div className="col-span-full py-12 text-center">
-              <Lightbulb className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
-              <p className="text-muted-foreground">Nenhuma metodologia cadastrada ainda</p>
-            </div>
-          )}
         </div>
+
+        {filteredMethodologies.length === 0 && (
+          <Card className="p-12 text-center">
+            <Lightbulb className="mx-auto h-16 w-16 mb-4 opacity-30" />
+            <p className="text-lg text-muted-foreground">
+              {searchQuery || selectedTag !== "all"
+                ? "Nenhuma metodologia encontrada com esses filtros"
+                : "Nenhuma metodologia cadastrada ainda"}
+            </p>
+            <p className="text-sm text-muted-foreground mt-2">
+              {searchQuery || selectedTag !== "all"
+                ? "Tente ajustar os filtros de busca"
+                : "Adicione a primeira metodologia ao banco de conhecimento!"}
+            </p>
+          </Card>
+        )}
       </div>
     </Layout>
   );

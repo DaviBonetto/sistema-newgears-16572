@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTabPersistence } from "@/hooks/useTabPersistence";
+import { useScrollPersistence } from "@/hooks/useScrollPersistence";
 import Layout from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,10 +19,13 @@ type QuadrantType = "identify" | "design" | "create" | "iterate" | "communicate"
 
 export default function FinalProject() {
   const { user } = useAuth();
+  const [activeTab, setActiveTab] = useTabPersistence("innovation");
   const [innovationData, setInnovationData] = useState<any>(null);
   const [robotDesignData, setRobotDesignData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  
+  useScrollPersistence(activeTab);
 
   useEffect(() => {
     fetchProjectData();
@@ -340,7 +345,7 @@ export default function FinalProject() {
           </p>
         </div>
 
-        <Tabs defaultValue="innovation" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="innovation">Projeto de Inovação</TabsTrigger>
             <TabsTrigger value="robot">Design do Robô</TabsTrigger>
