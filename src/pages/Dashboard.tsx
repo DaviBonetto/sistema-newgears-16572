@@ -24,9 +24,13 @@ export default function Dashboard() {
 
   const countdownInterval = useRef<NodeJS.Timeout | null>(null);
 
-  // Restore last path on mount
+  // Restore last path on mount only if coming from auth/setup
   useEffect(() => {
-    if (lastPath && lastPath !== "/dashboard" && lastPath !== "/auth" && lastPath !== "/profile-setup") {
+    // Don't auto-navigate if user manually accessed dashboard
+    const referrer = document.referrer;
+    const isFromAuth = referrer.includes('/auth') || referrer.includes('/profile-setup');
+    
+    if (isFromAuth && lastPath && lastPath !== "/dashboard" && lastPath !== "/auth" && lastPath !== "/profile-setup" && lastPath !== "/tv") {
       navigate(lastPath, { replace: true });
     }
   }, []);

@@ -18,18 +18,26 @@ export default function Auth() {
     e.preventDefault();
     setIsLoading(true);
 
-    const formData = new FormData(e.currentTarget);
-    const email = formData.get("email") as string;
-    const password = formData.get("password") as string;
+    try {
+      const formData = new FormData(e.currentTarget);
+      const email = formData.get("email") as string;
+      const password = formData.get("password") as string;
 
-    const { error } = await signIn(email, password);
+      console.log("Attempting login for:", email);
+      const { error } = await signIn(email, password);
 
-    if (error) {
-      toast.error(error.message);
+      if (error) {
+        console.error("Login error:", error);
+        toast.error(error.message || "Erro ao fazer login");
+        setIsLoading(false);
+      } else {
+        toast.success("Login realizado com sucesso!");
+        // Navigation handled by AuthContext
+      }
+    } catch (err: any) {
+      console.error("Unexpected login error:", err);
+      toast.error("Erro inesperado ao fazer login");
       setIsLoading(false);
-    } else {
-      toast.success("Login realizado com sucesso!");
-      navigate("/dashboard");
     }
   };
 
@@ -37,19 +45,27 @@ export default function Auth() {
     e.preventDefault();
     setIsLoading(true);
 
-    const formData = new FormData(e.currentTarget);
-    const email = formData.get("email") as string;
-    const password = formData.get("password") as string;
-    const fullName = formData.get("fullName") as string;
+    try {
+      const formData = new FormData(e.currentTarget);
+      const email = formData.get("email") as string;
+      const password = formData.get("password") as string;
+      const fullName = formData.get("fullName") as string;
 
-    const { error } = await signUp(email, password, fullName);
+      console.log("Attempting signup for:", email);
+      const { error } = await signUp(email, password, fullName);
 
-    if (error) {
-      toast.error(error.message);
+      if (error) {
+        console.error("Signup error:", error);
+        toast.error(error.message || "Erro ao criar conta");
+        setIsLoading(false);
+      } else {
+        toast.success("Conta criada! Redirecionando...");
+        setTimeout(() => navigate("/profile-setup"), 500);
+      }
+    } catch (err: any) {
+      console.error("Unexpected signup error:", err);
+      toast.error("Erro inesperado ao criar conta");
       setIsLoading(false);
-    } else {
-      toast.success("Conta criada! Redirecionando...");
-      navigate("/profile-setup");
     }
   };
 

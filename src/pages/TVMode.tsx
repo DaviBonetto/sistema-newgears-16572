@@ -1,20 +1,20 @@
 import { useEffect, useState, useRef } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, Trophy, Clock, Target, AlertCircle, TrendingUp, Users, Zap } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, Trophy, Clock, AlertCircle, TrendingUp, Users, Zap } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 export default function TVMode() {
+  const navigate = useNavigate();
   const [countdown, setCountdown] = useState("");
   const [topContributors, setTopContributors] = useState<any[]>([]);
   const [nextEvent, setNextEvent] = useState<any>(null);
-  const [avgMissionTime, setAvgMissionTime] = useState<number>(0);
   const [urgentTasks, setUrgentTasks] = useState<any[]>([]);
   const [taskProgress, setTaskProgress] = useState({ done: 0, total: 0 });
-  const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [currentCard, setCurrentCard] = useState(0);
 
   const countdownInterval = useRef<NodeJS.Timeout | null>(null);
@@ -84,7 +84,7 @@ export default function TVMode() {
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-    const [profilesData, nextEventData, missionsData, tasksData, allTasksData, activityData] = await Promise.all([
+    const [profilesData, nextEventData, tasksData, allTasksData] = await Promise.all([
       supabase
         .from("profiles")
         .select("*, tasks:tasks(status, updated_at), evidences:evidences(created_at)")
@@ -96,7 +96,6 @@ export default function TVMode() {
         .order("event_date", { ascending: true })
         .limit(1)
         .single(),
-      supabase.from("mission_runs").select("execution_time_seconds"),
       supabase
         .from("tasks")
         .select("*, responsible:responsible_id(*)")
@@ -104,11 +103,6 @@ export default function TVMode() {
         .neq("status", "done")
         .limit(5),
       supabase.from("tasks").select("status"),
-      supabase
-        .from("activity_log")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(5),
     ]);
 
     if (profilesData.data) {
@@ -133,15 +127,6 @@ export default function TVMode() {
       setNextEvent(nextEventData.data);
     }
 
-    if (missionsData.data && missionsData.data.length > 0) {
-      const avg =
-        missionsData.data.reduce(
-          (sum, m) => sum + Number(m.execution_time_seconds),
-          0
-        ) / missionsData.data.length;
-      setAvgMissionTime(avg);
-    }
-
     if (tasksData.data) {
       setUrgentTasks(tasksData.data);
     }
@@ -149,10 +134,6 @@ export default function TVMode() {
     if (allTasksData.data) {
       const done = allTasksData.data.filter((t) => t.status === "done").length;
       setTaskProgress({ done, total: allTasksData.data.length });
-    }
-
-    if (activityData.data) {
-      setRecentActivity(activityData.data);
     }
   };
 
@@ -280,6 +261,11 @@ export default function TVMode() {
   const CurrentCardComponent = cards[currentCard];
   const IconComponent = CurrentCardComponent.icon;
 
+  const handleBackClick = () => {
+    console.log("Back button clicked in TV Mode");
+    navigate("/dashboard", { replace: true });
+  };
+
   return (
     <div
       className="min-h-screen bg-gradient-to-br from-background via-background to-muted/30 text-foreground p-8"
@@ -292,10 +278,14 @@ export default function TVMode() {
       <div className="space-y-8 animate-fade-in">
         {/* Header */}
         <div className="flex items-center justify-between border-b-2 border-primary/30 pb-6">
-          <Link to="/dashboard" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-all hover:scale-105">
+          <Button
+            variant="ghost"
+            onClick={handleBackClick}
+            className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-all hover:scale-105"
+          >
             <ArrowLeft className="h-6 w-6" />
             <span className="text-lg">Voltar para o Dashboard</span>
-          </Link>
+          </Button>
           <h1 className="text-5xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
             SYSTEM GEARS - MODO TV
           </h1>
