@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import Layout from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, GripVertical } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import {
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  DragStartEvent,
+  DragOverEvent,
+  closestCorners,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+} from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 const columns = [
   { id: "todo", title: "A Fazer", color: "bg-muted" },
@@ -29,6 +43,110 @@ const priorities = [
   { value: "urgent", label: "Urgente", color: "bg-red-500" },
 ];
 
+interface DroppableColumnProps {
+  column: typeof columns[0];
+  children: React.ReactNode;
+}
+
+function DroppableColumn({ column, children }: DroppableColumnProps) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: column.id,
+  });
+
+  return (
+    <div ref={setNodeRef} className="flex flex-col">
+      <Card className={`${column.color} flex-1 transition-all ${isOver ? "ring-2 ring-primary" : ""}`}>
+        {children}
+      </Card>
+    </div>
+  );
+}
+
+interface TaskCardProps {
+  task: any;
+  onDelete: (id: string) => void;
+}
+
+function TaskCard({ task, onDelete }: TaskCardProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: task.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  const priority = priorities.find((p) => p.value === task.priority);
+
+  return (
+    <Card
+      ref={setNodeRef}
+      style={style}
+      className={`border transition-all hover:shadow-md ${isDragging ? "z-50" : ""}`}
+    >
+      <CardContent className="p-2">
+        <div className="mb-1.5 flex items-start justify-between gap-1">
+          <div className="flex items-start gap-1 flex-1">
+            <button
+              {...attributes}
+              {...listeners}
+              className="cursor-grab active:cursor-grabbing touch-none p-0.5 hover:bg-muted rounded mt-0.5"
+            >
+              <GripVertical className="h-4 w-4 text-muted-foreground" />
+            </button>
+            <p className="font-medium text-sm flex-1">
+              {task.title}
+            </p>
+          </div>
+          <div className="flex items-center gap-1">
+            {priority && (
+              <Badge
+                className={`${priority.color} text-white text-xs px-1.5 py-0`}
+                variant="secondary"
+              >
+                {priority.label}
+              </Badge>
+            )}
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-6 w-6"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(task.id);
+              }}
+            >
+              <Trash2 className="h-3 w-3 text-destructive" />
+            </Button>
+          </div>
+        </div>
+        {task.description && (
+          <p className="mb-1.5 text-xs text-muted-foreground line-clamp-2 ml-5">
+            {task.description}
+          </p>
+        )}
+        {task.responsible && (
+          <p className="text-xs text-muted-foreground ml-5">
+            {task.responsible.full_name}
+          </p>
+        )}
+        {task.evidence_required && (
+          <Badge variant="outline" className="mt-1.5 text-xs ml-5">
+            Evidência obrigatória
+          </Badge>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Tasks() {
   const { user } = useAuth();
   const [tasks, setTasks] = useState<any[]>([]);
@@ -36,6 +154,15 @@ export default function Tasks() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    })
+  );
 
   useEffect(() => {
     fetchTasks();
@@ -90,8 +217,10 @@ export default function Tasks() {
     if (error) {
       toast.error("Erro ao atualizar tarefa");
     } else {
-      fetchTasks();
-      toast.success("Status atualizado!");
+      // Update local state immediately for smooth UX
+      setTasks((prev) =>
+        prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
+      );
     }
   };
 
@@ -114,13 +243,79 @@ export default function Tasks() {
     setTaskToDelete(null);
   };
 
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    const { active, over } = event;
+    
+    if (!over) return;
+
+    const activeTask = tasks.find((t) => t.id === active.id);
+    if (!activeTask) return;
+
+    // Check if over a column (not a task)
+    const overColumn = columns.find((col) => col.id === over.id);
+    if (overColumn && activeTask.status !== overColumn.id) {
+      // Optimistically update UI
+      setTasks((prev) =>
+        prev.map((t) => (t.id === active.id ? { ...t, status: overColumn.id } : t))
+      );
+    }
+
+    // Check if over another task
+    const overTask = tasks.find((t) => t.id === over.id);
+    if (overTask && activeTask.status !== overTask.status) {
+      // Move to the same column as the task it's over
+      setTasks((prev) =>
+        prev.map((t) => (t.id === active.id ? { ...t, status: overTask.status } : t))
+      );
+    }
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null);
+
+    if (!over) return;
+
+    const activeTask = tasks.find((t) => t.id === active.id);
+    if (!activeTask) return;
+
+    let targetStatus = activeTask.status;
+
+    // Check if dropped on a column
+    const columnId = columns.find((col) => col.id === over.id)?.id;
+    if (columnId) {
+      targetStatus = columnId;
+    } else {
+      // Check if dropped on a task
+      const overTask = tasks.find((t) => t.id === over.id);
+      if (overTask) {
+        targetStatus = overTask.status;
+      }
+    }
+
+    if (activeTask.status !== targetStatus) {
+      updateTaskStatus(activeTask.id, targetStatus);
+      toast.success(`Tarefa movida para "${columns.find((c) => c.id === targetStatus)?.title}"`);
+    }
+  };
+
+  const handleDragCancel = () => {
+    setActiveId(null);
+  };
+
+  const activeTask = activeId ? tasks.find((t) => t.id === activeId) : null;
+
   return (
     <Layout>
       <div className="space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold">Quadro de Metas</h1>
-            <p className="text-muted-foreground">Organize e acompanhe as tarefas do time</p>
+            <p className="text-muted-foreground">Arraste e solte tarefas entre as colunas</p>
           </div>
           <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
             <DialogTrigger asChild>
@@ -208,93 +403,75 @@ export default function Tasks() {
           </Dialog>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {columns.map((column) => (
-            <Card key={column.id} className={column.color}>
-              <CardHeader>
-                <CardTitle className="text-base">{column.title}</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {tasks
-                  .filter((task) => task.status === column.id)
-                  .map((task) => {
-                    const priority = priorities.find((p) => p.value === task.priority);
-                    return (
-                      <Card
-                        key={task.id}
-                        className="border transition-all hover:shadow-md"
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        >
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {columns.map((column) => {
+              const columnTasks = tasks.filter((task) => task.status === column.id);
+              return (
+                <DroppableColumn key={column.id} column={column}>
+                  <CardHeader>
+                    <CardTitle className="text-base flex items-center justify-between">
+                      {column.title}
+                      <Badge variant="secondary" className="ml-2">
+                        {columnTasks.length}
+                      </Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent
+                    className="space-y-2 min-h-[200px] p-3"
+                  >
+                    <SortableContext
+                      items={columnTasks.map((t) => t.id)}
+                      strategy={verticalListSortingStrategy}
+                      id={column.id}
+                    >
+                      {columnTasks.map((task) => (
+                        <TaskCard
+                          key={task.id}
+                          task={task}
+                          onDelete={(id) => {
+                            setTaskToDelete(id);
+                            setDeleteDialogOpen(true);
+                          }}
+                        />
+                      ))}
+                    </SortableContext>
+                    {columnTasks.length === 0 && (
+                      <div
+                        className="py-8 text-center text-sm text-muted-foreground border-2 border-dashed border-muted-foreground/20 rounded-lg"
                       >
-                        <CardContent className="p-2">
-                          <div className="mb-1.5 flex items-start justify-between gap-1">
-                            <p 
-                              className="font-medium text-sm cursor-pointer flex-1"
-                              onClick={() => {
-                                if (column.id !== "done") {
-                                  const nextStatus =
-                                    column.id === "todo"
-                                      ? "in_progress"
-                                      : column.id === "in_progress"
-                                        ? "done"
-                                        : "done";
-                                  updateTaskStatus(task.id, nextStatus);
-                                }
-                              }}
-                            >
-                              {task.title}
-                            </p>
-                            <div className="flex items-center gap-1">
-                              {priority && (
-                                <Badge
-                                  className={`${priority.color} text-white text-xs px-1.5 py-0`}
-                                  variant="secondary"
-                                >
-                                  {priority.label}
-                                </Badge>
-                              )}
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-6 w-6"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setTaskToDelete(task.id);
-                                  setDeleteDialogOpen(true);
-                                }}
-                              >
-                                <Trash2 className="h-3 w-3 text-destructive" />
-                              </Button>
-                            </div>
-                          </div>
-                          {task.description && (
-                            <p className="mb-1.5 text-xs text-muted-foreground line-clamp-1">
-                              {task.description}
-                            </p>
-                          )}
-                          {task.responsible && (
-                            <p className="text-xs text-muted-foreground">
-                              {task.responsible.full_name}
-                            </p>
-                          )}
-                          {task.evidence_required && (
-                            <Badge variant="outline" className="mt-1.5 text-xs">
-                              Evidência obrigatória
-                            </Badge>
-                          )}
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                {tasks.filter((task) => task.status === column.id).length === 0 && (
-                  <p className="py-4 text-center text-sm text-muted-foreground">
-                    Nenhuma tarefa
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                        Arraste tarefas aqui
+                      </div>
+                    )}
+                  </CardContent>
+                </DroppableColumn>
+              );
+            })}
+          </div>
 
-        {/* Delete Confirmation Dialog */}
+          <DragOverlay>
+            {activeTask ? (
+              <Card className="border-2 border-primary shadow-lg rotate-3 w-[300px]">
+                <CardContent className="p-2">
+                  <div className="mb-1.5 flex items-start gap-1">
+                    <GripVertical className="h-4 w-4 text-muted-foreground mt-0.5" />
+                    <p className="font-medium text-sm flex-1">
+                      {activeTask.title}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+
         <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
           <AlertDialogContent>
             <AlertDialogHeader>
