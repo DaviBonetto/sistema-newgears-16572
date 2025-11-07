@@ -27,12 +27,10 @@ import { cn } from "@/lib/utils";
 const navigation = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Metas", href: "/tasks", icon: CheckSquare },
-  { name: "Evidências", href: "/evidences", icon: FileText },
   { name: "Calendário", href: "/calendar", icon: Calendar },
   { name: "Linha do Tempo", href: "/timeline", icon: CalendarRange },
   { name: "Equipe GEARS", href: "/team", icon: Users },
   { name: "Metodologias", href: "/methodologies", icon: Lightbulb },
-  { name: "Projeto Inovação", href: "/innovation", icon: Trophy },
   { name: "Robô", href: "/robot", icon: Bot },
   { name: "Brainstorming", href: "/brainstorming", icon: Lightbulb },
   { name: "Projeto Final", href: "/final-project", icon: Trophy },

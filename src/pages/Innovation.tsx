@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useScrollPersistence } from "@/hooks/useScrollPersistence";
@@ -8,14 +9,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Trophy, Plus, Trash2 } from "lucide-react";
+import { Trophy, Plus, Trash2, ArrowLeft, Home } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 
 export default function Innovation() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [project, setProject] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   
   useScrollPersistence();
 
@@ -33,18 +36,101 @@ export default function Innovation() {
     }
   }, [project?.id]);
 
-  const fetchProject = async () => {
-    const { data } = await supabase
-      .from("innovation_project")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .single();
+  // Auto-save attachments to Supabase when they change
+  useEffect(() => {
+    if (!user || !project?.id) return;
 
-    if (data) {
-      setProject(data);
+    // Clear existing timeout
+    if (autoSaveTimeout) {
+      clearTimeout(autoSaveTimeout);
     }
-    setLoading(false);
+
+    // Set new timeout for auto-save (2 seconds delay to avoid excessive saves)
+    const timeout = setTimeout(() => {
+      saveAttachmentsToSupabase();
+    }, 2000);
+
+    setAutoSaveTimeout(timeout);
+
+    return () => {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    };
+  }, [sectionAttachments, project?.id, user]);
+
+  const fetchProject = async () => {
+    try {
+      setError(null);
+      setLoading(true);
+      
+      const { data, error } = await supabase
+        .from("innovation_project")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
+        throw error;
+      }
+
+      if (data) {
+        setProject(data);
+        
+        // Load attachments from Supabase if they exist
+        if (data.section_attachments && Array.isArray(data.section_attachments)) {
+          const loadedAttachments: { [key: string]: any[] } = {};
+          data.section_attachments.forEach((item: any) => {
+            if (item.section_key && item.attachments) {
+              loadedAttachments[item.section_key] = item.attachments;
+            }
+          });
+          setSectionAttachments(loadedAttachments);
+          
+          // Also save to localStorage for backup
+          localStorage.setItem(`innovation-attachments-${data.id}`, JSON.stringify(loadedAttachments));
+        }
+      } else {
+        // Criar projeto inicial se não existir
+        await createInitialProject();
+      }
+    } catch (error: any) {
+      console.error("Erro ao carregar projeto:", error);
+      setError("Erro ao carregar projeto. Tente recarregar a página.");
+      toast.error("Erro ao carregar projeto");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createInitialProject = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from("innovation_project")
+        .insert({
+          created_by: user.id,
+          problem: "",
+          research_sources: "",
+          expert_conversations: "",
+          prototyping: "",
+          tests: "",
+          learnings: "",
+          solution_evolution: "",
+          impact_plan: ""
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      setProject(data);
+      toast.success("Projeto inicial criado!");
+    } catch (error: any) {
+      console.error("Erro ao criar projeto inicial:", error);
+      throw error;
+    }
   };
 
   const handleUpdate = async (field: string, value: string) => {
@@ -83,6 +169,7 @@ export default function Innovation() {
   const [mediaFiles, setMediaFiles] = useState<any[]>([]);
   const [customSections, setCustomSections] = useState<any[]>([]);
   const [sectionAttachments, setSectionAttachments] = useState<{ [key: string]: any[] }>({});
+  const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
 
   const defaultSections = [
     { key: "problem", label: "Problema Identificado" },
@@ -134,7 +221,38 @@ export default function Innovation() {
     
     // Auto-save to localStorage as backup
     localStorage.setItem(`innovation-attachments-${project?.id || 'temp'}`, JSON.stringify(updated));
-    toast.success("Anexos salvos!");
+    toast.success("Anexos salvos localmente!");
+  };
+
+  const saveAttachmentsToSupabase = async () => {
+    if (!user || !project?.id) return;
+
+    try {
+      // Prepare attachments data for Supabase
+      const attachmentsData = Object.entries(sectionAttachments).map(([sectionKey, attachments]) => ({
+        section_key: sectionKey,
+        attachments: attachments || []
+      }));
+
+      // Update project with attachments
+      const { error } = await supabase
+        .from("innovation_project")
+        .update({ 
+          section_attachments: attachmentsData,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", project.id);
+
+      if (error) {
+        console.error("Erro ao salvar anexos no Supabase:", error);
+        // Don't show error to user to avoid spam, but keep local copy
+        return;
+      }
+
+      console.log("Anexos salvos com sucesso no Supabase!");
+    } catch (error) {
+      console.error("Erro ao salvar anexos:", error);
+    }
   };
 
   const handleAddSection = () => {
@@ -160,7 +278,29 @@ export default function Innovation() {
     return (
       <Layout>
         <div className="flex items-center justify-center py-12">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <div className="text-center">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4" />
+            <p className="text-muted-foreground">Carregando projeto de inovação...</p>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="text-destructive mb-4">
+              <Trophy className="h-12 w-12 mx-auto" />
+            </div>
+            <h3 className="text-lg font-semibold mb-2">Erro ao carregar projeto</h3>
+            <p className="text-muted-foreground mb-4">{error}</p>
+            <Button onClick={fetchProject} variant="outline">
+              Tentar novamente
+            </Button>
+          </div>
         </div>
       </Layout>
     );
@@ -169,14 +309,24 @@ export default function Innovation() {
   return (
     <Layout>
       <div className="space-y-6">
-        <div>
-          <h1 className="flex items-center gap-2 text-3xl font-bold">
-            <Trophy className="h-8 w-8 text-secondary" />
-            Projeto de Inovação
-          </h1>
-          <p className="text-muted-foreground">
-            Documentação estruturada para o projeto do torneio
-          </p>
+        <div className="flex items-center gap-4 mb-6">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => navigate('/dashboard')}
+            className="flex-shrink-0"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div className="flex-1">
+            <h1 className="flex items-center gap-2 text-3xl font-bold">
+              <Trophy className="h-8 w-8 text-secondary" />
+              Projeto de Inovação
+            </h1>
+            <p className="text-muted-foreground">
+              Documentação estruturada para o projeto do torneio
+            </p>
+          </div>
         </div>
 
         <div className="flex justify-end">

@@ -10,14 +10,12 @@ import Auth from "./pages/Auth";
 import ProfileSetup from "./pages/ProfileSetup";
 import Dashboard from "./pages/Dashboard";
 import Tasks from "./pages/Tasks";
-import Evidences from "./pages/Evidences";
 import Calendar from "./pages/Calendar";
 import Missions from "./pages/Missions";
 import Timeline from "./pages/Timeline";
 import TimelineTV from "./pages/TimelineTV";
 import Team from "./pages/Team";
 import Methodologies from "./pages/Methodologies";
-import Innovation from "./pages/Innovation";
 import Robot from "./pages/Robot";
 import Brainstorming from "./pages/Brainstorming";
 import FinalProject from "./pages/FinalProject";
@@ -49,13 +47,11 @@ const App = () => (
             <Route path="/profile-setup" element={<ProtectedRoute><ProfileSetup /></ProtectedRoute>} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/tasks" element={<ProtectedRoute><Tasks /></ProtectedRoute>} />
-            <Route path="/evidences" element={<ProtectedRoute><Evidences /></ProtectedRoute>} />
             <Route path="/calendar" element={<ProtectedRoute><Calendar /></ProtectedRoute>} />
             <Route path="/timeline" element={<ProtectedRoute><Timeline /></ProtectedRoute>} />
             <Route path="/timeline-tv" element={<TimelineTV />} />
             <Route path="/team" element={<ProtectedRoute><Team /></ProtectedRoute>} />
             <Route path="/methodologies" element={<ProtectedRoute><Methodologies /></ProtectedRoute>} />
-            <Route path="/innovation" element={<ProtectedRoute><Innovation /></ProtectedRoute>} />
             <Route path="/robot" element={<ProtectedRoute><Robot /></ProtectedRoute>} />
             <Route path="/brainstorming" element={<ProtectedRoute><Brainstorming /></ProtectedRoute>} />
             <Route path="/final-project" element={<ProtectedRoute><FinalProject /></ProtectedRoute>} />
