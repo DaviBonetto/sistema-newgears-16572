@@ -180,6 +180,7 @@ export default function Tasks() {
   const [taskToDelete, setTaskToDelete] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [selectedResponsibles, setSelectedResponsibles] = useState<string[]>([]);
+  const [dragOriginStatus, setDragOriginStatus] = useState<string | null>(null);
 
   useTabPersistence("todo");
   useScrollPersistence();
@@ -303,6 +304,8 @@ export default function Tasks() {
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);
+    const activeTask = tasks.find((t) => t.id === event.active.id);
+    setDragOriginStatus(activeTask ? activeTask.status : null);
   };
 
   const handleDragOver = (event: DragOverEvent) => {
@@ -336,12 +339,18 @@ export default function Tasks() {
     const { active, over } = event;
     setActiveId(null);
 
-    if (!over) return;
+    if (!over) {
+      setDragOriginStatus(null);
+      return;
+    }
 
     const activeTask = tasks.find((t) => t.id === active.id);
-    if (!activeTask) return;
+    if (!activeTask) {
+      setDragOriginStatus(null);
+      return;
+    }
 
-    let targetStatus = activeTask.status;
+    let targetStatus = dragOriginStatus ?? activeTask.status;
 
     // Check if dropped on a column
     const columnId = columns.find((col) => col.id === over.id)?.id;
@@ -355,10 +364,12 @@ export default function Tasks() {
       }
     }
 
-    if (activeTask.status !== targetStatus) {
+    if ((dragOriginStatus ?? activeTask.status) !== targetStatus) {
       updateTaskStatus(activeTask.id, targetStatus);
       toast.success(`Tarefa movida para "${columns.find((c) => c.id === targetStatus)?.title}"`);
     }
+
+    setDragOriginStatus(null);
   };
 
   const handleDragCancel = () => {
