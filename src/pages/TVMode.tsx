@@ -69,7 +69,7 @@ export default function TVMode() {
 
   useEffect(() => {
     cardInterval.current = setInterval(() => {
-      setCurrentCard((prev) => (prev + 1) % 5);
+      setCurrentCard((prev) => (prev + 1) % 4);
     }, 10000);
     
     return () => {
@@ -229,21 +229,6 @@ export default function TVMode() {
       ),
     },
     {
-      title: "TEMPO MÉDIO DE MISSÕES",
-      icon: Target,
-      gradient: "from-accent/20 to-accent/5",
-      content: (
-        <div className="flex items-center justify-center py-12">
-          <div className="text-center">
-            <p className="text-8xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent mb-4">
-              {avgMissionTime > 0 ? avgMissionTime.toFixed(1) : "--"}
-            </p>
-            <p className="text-3xl text-muted-foreground">segundos</p>
-          </div>
-        </div>
-      ),
-    },
-    {
       title: "TAREFAS URGENTES",
       icon: AlertCircle,
       gradient: "from-destructive/20 to-destructive/5",
@@ -307,11 +292,9 @@ export default function TVMode() {
       <div className="space-y-8 animate-fade-in">
         {/* Header */}
         <div className="flex items-center justify-between border-b-2 border-primary/30 pb-6">
-          <Link to="/dashboard">
-            <button className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-all hover:scale-105">
-              <ArrowLeft className="h-6 w-6" />
-              <span className="text-lg">Voltar</span>
-            </button>
+          <Link to="/dashboard" className="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-all hover:scale-105">
+            <ArrowLeft className="h-6 w-6" />
+            <span className="text-lg">Voltar para o Dashboard</span>
           </Link>
           <h1 className="text-5xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
             SYSTEM GEARS - MODO TV
@@ -320,11 +303,11 @@ export default function TVMode() {
         </div>
 
         {/* Countdown */}
-        <div className="rounded-3xl bg-gradient-to-r from-primary/20 via-secondary/20 to-primary/20 p-10 text-center border-4 border-primary shadow-2xl animate-pulse">
+        <div className="rounded-3xl bg-gradient-to-r from-primary/20 via-secondary/20 to-primary/20 p-10 text-center border-4 border-primary shadow-2xl">
           <p className="text-lg text-muted-foreground mb-3 uppercase tracking-wider">
             Contagem Regressiva para o Campeonato
           </p>
-          <p className="text-8xl font-bold bg-gradient-to-r from-primary via-secondary to-primary bg-clip-text text-transparent tracking-tight mb-3">
+          <p className="text-8xl font-bold bg-gradient-to-r from-primary via-secondary to-primary bg-clip-text text-transparent tracking-tight mb-3 transition-all duration-500">
             {countdown}
           </p>
           <p className="text-2xl text-muted-foreground font-semibold">

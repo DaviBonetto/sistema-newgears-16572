@@ -23,6 +23,16 @@ export default function Innovation() {
     fetchProject();
   }, []);
 
+  useEffect(() => {
+    // Load attachments from localStorage
+    if (project?.id) {
+      const saved = localStorage.getItem(`innovation-attachments-${project.id}`);
+      if (saved) {
+        setSectionAttachments(JSON.parse(saved));
+      }
+    }
+  }, [project?.id]);
+
   const fetchProject = async () => {
     const { data } = await supabase
       .from("innovation_project")
@@ -40,32 +50,33 @@ export default function Innovation() {
   const handleUpdate = async (field: string, value: string) => {
     if (!user) return;
 
-    if (project) {
-      const { error } = await supabase
-        .from("innovation_project")
-        .update({ [field]: value })
-        .eq("id", project.id);
+    try {
+      if (project) {
+        const { error } = await supabase
+          .from("innovation_project")
+          .update({ [field]: value, updated_at: new Date().toISOString() })
+          .eq("id", project.id);
 
-      if (error) {
-        toast.error("Erro ao salvar");
-      } else {
-        toast.success("Salvo com sucesso!");
+        if (error) throw error;
+        toast.success("Salvo automaticamente!");
         fetchProject();
-      }
-    } else {
-      const { error } = await supabase
-        .from("innovation_project")
-        .insert({
-          [field]: value,
-          created_by: user.id,
-        });
-
-      if (error) {
-        toast.error("Erro ao criar projeto");
       } else {
+        const { data, error } = await supabase
+          .from("innovation_project")
+          .insert({
+            [field]: value,
+            created_by: user.id,
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        setProject(data);
         toast.success("Projeto criado!");
-        fetchProject();
       }
+    } catch (error) {
+      console.error("Erro ao salvar:", error);
+      toast.error("Erro ao salvar. Tente novamente.");
     }
   };
 
@@ -118,7 +129,12 @@ export default function Innovation() {
   };
 
   const updateSectionAttachments = (sectionKey: string, attachments: any[]) => {
-    setSectionAttachments((prev) => ({ ...prev, [sectionKey]: attachments }));
+    const updated = { ...sectionAttachments, [sectionKey]: attachments };
+    setSectionAttachments(updated);
+    
+    // Auto-save to localStorage as backup
+    localStorage.setItem(`innovation-attachments-${project?.id || 'temp'}`, JSON.stringify(updated));
+    toast.success("Anexos salvos!");
   };
 
   const handleAddSection = () => {
