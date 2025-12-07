@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -9,9 +9,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Trophy, Plus, Trash2, ArrowLeft, Home } from "lucide-react";
+import { Trophy, Plus, Trash2, ArrowLeft, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { Input } from "@/components/ui/input";
+
+interface Attachment {
+  id: string;
+  url: string;
+  name: string;
+  type: string;
+  size: number;
+  status: 'pending' | 'uploading' | 'completed' | 'error';
+  progress: number;
+  storagePath?: string;
+}
 
 export default function Innovation() {
   const { user } = useAuth();
@@ -19,45 +29,54 @@ export default function Innovation() {
   const [project, setProject] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sectionAttachments, setSectionAttachments] = useState<{ [key: string]: Attachment[] }>({});
+  const [customSections, setCustomSections] = useState<any[]>([]);
+  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   useScrollPersistence();
+
+  const defaultSections = [
+    { key: "problem", label: "Problema Identificado" },
+    { key: "research_sources", label: "Fontes Pesquisadas" },
+    { key: "expert_conversations", label: "Conversas com Especialistas" },
+    { key: "prototyping", label: "Prototipagem" },
+    { key: "tests", label: "Testes Realizados" },
+    { key: "learnings", label: "Aprendizados" },
+    { key: "solution_evolution", label: "Evolução da Solução" },
+    { key: "impact_plan", label: "Plano de Impacto" },
+  ];
 
   useEffect(() => {
     fetchProject();
   }, []);
 
+  // Load attachments from localStorage when project loads
   useEffect(() => {
-    // Load attachments from localStorage
     if (project?.id) {
       const saved = localStorage.getItem(`innovation-attachments-${project.id}`);
       if (saved) {
-        setSectionAttachments(JSON.parse(saved));
+        try {
+          setSectionAttachments(JSON.parse(saved));
+        } catch (e) {
+          console.error("Error parsing saved attachments:", e);
+        }
       }
     }
   }, [project?.id]);
 
-  // Auto-save attachments to Supabase when they change
+  // Auto-save attachments to localStorage when they change
   useEffect(() => {
-    if (!user || !project?.id) return;
+    if (!project?.id || Object.keys(sectionAttachments).length === 0) return;
 
     // Clear existing timeout
-    if (autoSaveTimeout) {
-      clearTimeout(autoSaveTimeout);
+    if (autoSaveTimeoutRef.current) {
+      clearTimeout(autoSaveTimeoutRef.current);
     }
 
-    // Set new timeout for auto-save (2 seconds delay to avoid excessive saves)
-    const timeout = setTimeout(() => {
-      saveAttachmentsToSupabase();
-    }, 2000);
+    // Save to localStorage immediately
+    localStorage.setItem(`innovation-attachments-${project.id}`, JSON.stringify(sectionAttachments));
 
-    setAutoSaveTimeout(timeout);
-
-    return () => {
-      if (timeout) {
-        clearTimeout(timeout);
-      }
-    };
-  }, [sectionAttachments, project?.id, user]);
+  }, [sectionAttachments, project?.id]);
 
   const fetchProject = async () => {
     try {
@@ -69,30 +88,15 @@ export default function Innovation() {
         .select("*")
         .order("created_at", { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
-      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
+      if (error) {
         throw error;
       }
 
       if (data) {
         setProject(data);
-        
-        // Load attachments from Supabase if they exist
-        if (data.section_attachments && Array.isArray(data.section_attachments)) {
-          const loadedAttachments: { [key: string]: any[] } = {};
-          data.section_attachments.forEach((item: any) => {
-            if (item.section_key && item.attachments) {
-              loadedAttachments[item.section_key] = item.attachments;
-            }
-          });
-          setSectionAttachments(loadedAttachments);
-          
-          // Also save to localStorage for backup
-          localStorage.setItem(`innovation-attachments-${data.id}`, JSON.stringify(loadedAttachments));
-        }
       } else {
-        // Criar projeto inicial se não existir
         await createInitialProject();
       }
     } catch (error: any) {
@@ -144,8 +148,8 @@ export default function Innovation() {
           .eq("id", project.id);
 
         if (error) throw error;
+        setProject((prev: any) => ({ ...prev, [field]: value }));
         toast.success("Salvo automaticamente!");
-        fetchProject();
       } else {
         const { data, error } = await supabase
           .from("innovation_project")
@@ -166,93 +170,12 @@ export default function Innovation() {
     }
   };
 
-  const [mediaFiles, setMediaFiles] = useState<any[]>([]);
-  const [customSections, setCustomSections] = useState<any[]>([]);
-  const [sectionAttachments, setSectionAttachments] = useState<{ [key: string]: any[] }>({});
-  const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
-
-  const defaultSections = [
-    { key: "problem", label: "Problema Identificado" },
-    { key: "research_sources", label: "Fontes Pesquisadas" },
-    { key: "expert_conversations", label: "Conversas com Especialistas" },
-    { key: "prototyping", label: "Prototipagem" },
-    { key: "tests", label: "Testes Realizados" },
-    { key: "learnings", label: "Aprendizados" },
-    { key: "solution_evolution", label: "Evolução da Solução" },
-    { key: "impact_plan", label: "Plano de Impacto" },
-  ];
-
-  const handleFileUpload = async (file: File, section: string) => {
-    const fileExt = file.name.split(".").pop();
-    const fileName = `${section}/${Math.random()}.${fileExt}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("evidences")
-      .upload(fileName, file);
-
-    if (uploadError) {
-      toast.error("Erro ao fazer upload");
-      return;
-    }
-
-    const { data: urlData } = supabase.storage
-      .from("evidences")
-      .getPublicUrl(fileName);
-
-    const newFile = {
-      url: urlData.publicUrl,
-      name: file.name,
-      type: file.type,
-      section: section,
-    };
-
-    setMediaFiles([...mediaFiles, newFile]);
-    toast.success("Arquivo anexado!");
-  };
-
-  const handleRemoveFile = (index: number) => {
-    setMediaFiles(mediaFiles.filter((_, i) => i !== index));
-    toast.success("Arquivo removido!");
-  };
-
-  const updateSectionAttachments = (sectionKey: string, attachments: any[]) => {
-    const updated = { ...sectionAttachments, [sectionKey]: attachments };
-    setSectionAttachments(updated);
-    
-    // Auto-save to localStorage as backup
-    localStorage.setItem(`innovation-attachments-${project?.id || 'temp'}`, JSON.stringify(updated));
-    toast.success("Anexos salvos localmente!");
-  };
-
-  const saveAttachmentsToSupabase = async () => {
-    if (!user || !project?.id) return;
-
-    try {
-      // Prepare attachments data for Supabase
-      const attachmentsData = Object.entries(sectionAttachments).map(([sectionKey, attachments]) => ({
-        section_key: sectionKey,
-        attachments: attachments || []
-      }));
-
-      // Update project with attachments
-      const { error } = await supabase
-        .from("innovation_project")
-        .update({ 
-          section_attachments: attachmentsData,
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", project.id);
-
-      if (error) {
-        console.error("Erro ao salvar anexos no Supabase:", error);
-        // Don't show error to user to avoid spam, but keep local copy
-        return;
-      }
-
-      console.log("Anexos salvos com sucesso no Supabase!");
-    } catch (error) {
-      console.error("Erro ao salvar anexos:", error);
-    }
+  const updateSectionAttachments = (sectionKey: string, attachments: Attachment[]) => {
+    setSectionAttachments(prev => {
+      const updated = { ...prev, [sectionKey]: attachments };
+      return updated;
+    });
+    toast.success("Anexos salvos!");
   };
 
   const handleAddSection = () => {
@@ -279,7 +202,7 @@ export default function Innovation() {
       <Layout>
         <div className="flex items-center justify-center py-12">
           <div className="text-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4" />
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
             <p className="text-muted-foreground">Carregando projeto de inovação...</p>
           </div>
         </div>
@@ -397,7 +320,6 @@ export default function Innovation() {
           <CardContent>
             <p className="text-sm text-muted-foreground">
               Use esta seção para acompanhar manualmente os critérios da rubrica do torneio.
-              Implemente checkboxes personalizados conforme necessário.
             </p>
           </CardContent>
         </Card>

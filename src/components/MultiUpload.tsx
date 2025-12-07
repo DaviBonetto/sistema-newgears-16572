@@ -304,7 +304,7 @@ export function MultiUpload({
     if (att.status === 'uploading') return acc + att.progress;
     if (att.status === 'completed') return acc + 100;
     return acc;
-  }, 0) / Math.max(attachments.filter(a => a.status !== 'link').length, 1);
+  }, 0) / Math.max(attachments.filter(a => a.type !== 'link').length, 1);
 
   return (
     <div className="space-y-4">
