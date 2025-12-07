@@ -762,6 +762,60 @@ export type Database = {
           },
         ]
       }
+      time_machine_events: {
+        Row: {
+          attachments: Json | null
+          created_at: string
+          description: string | null
+          event_category: string
+          event_type: string
+          id: string
+          metadata: Json | null
+          related_event_id: string | null
+          title: string
+          user_id: string | null
+        }
+        Insert: {
+          attachments?: Json | null
+          created_at?: string
+          description?: string | null
+          event_category: string
+          event_type: string
+          id?: string
+          metadata?: Json | null
+          related_event_id?: string | null
+          title: string
+          user_id?: string | null
+        }
+        Update: {
+          attachments?: Json | null
+          created_at?: string
+          description?: string | null
+          event_category?: string
+          event_type?: string
+          id?: string
+          metadata?: Json | null
+          related_event_id?: string | null
+          title?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "time_machine_events_related_event_id_fkey"
+            columns: ["related_event_id"]
+            isOneToOne: false
+            referencedRelation: "time_machine_events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "time_machine_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       timeline_events: {
         Row: {
           attachments: Json | null
